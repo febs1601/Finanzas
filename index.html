@@ -180,6 +180,17 @@ html,body{height:100%;background:#F0F2F5;font-family:-apple-system,'Segoe UI',sa
 .spn{width:36px;height:36px;border:3px solid var(--gl);border-top-color:var(--t);border-radius:50%;animation:spin .8s linear infinite;}
 @keyframes spin{to{transform:rotate(360deg);}}
 .ldt{font-size:14px;color:var(--gm);}
+.liq-hist-item{background:var(--w);border-radius:var(--rads);padding:12px 14px;margin-bottom:8px;display:flex;align-items:center;gap:10px;box-shadow:0 2px 8px rgba(0,0,0,.06);}
+.liq-hist-ico{width:36px;height:36px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0;}
+.liq-hist-info{flex:1;}
+.liq-hist-desc{font-size:13px;font-weight:600;color:var(--g);}
+.liq-hist-date{font-size:11px;color:var(--gm);margin-top:2px;}
+.liq-hist-amt{font-size:14px;font-weight:700;}
+.btn-liq-total{width:100%;padding:14px;border-radius:var(--rads);font-size:15px;font-weight:700;border:none;cursor:pointer;background:var(--t);color:white;margin-top:8px;}
+.btn-liq-parcial{width:100%;padding:14px;border-radius:var(--rads);font-size:15px;font-weight:700;border:2px solid var(--t);cursor:pointer;background:var(--tl);color:var(--td);margin-top:8px;}
+.liq-monto-wrap{display:flex;align-items:center;gap:8px;margin-top:10px;}
+.liq-monto-inp{flex:1;padding:12px;border:1.5px solid #E5E7EB;border-radius:var(--rads);font-size:20px;font-weight:700;text-align:center;background:var(--gl);outline:none;color:var(--g);}
+.liq-monto-inp:focus{border-color:var(--t);background:white;}
 .split-row{display:flex;align-items:center;gap:8px;margin-top:4px;}
 .split-item{flex:1;background:var(--gl);border-radius:var(--rads);padding:10px 12px;}
 .split-f{border:1.5px solid var(--t);}
@@ -334,6 +345,13 @@ html,body{height:100%;background:#F0F2F5;font-family:-apple-system,'Segoe UI',sa
   </div>
 </div>
 
+<div class="mo" id="mo-liq">
+  <div class="md">
+    <div class="mh"></div>
+    <div class="mt">Liquidar deuda</div>
+    <div id="liq-modal-body"></div>
+  </div>
+</div>
 <div class="toast" id="toast"></div>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
@@ -346,7 +364,7 @@ const DEF={f:{ing:2700000,nom:'Felipe'},v:{ing:881624,nom:'Vannia'}};
 // ══════════════════════════════════════
 // STATE
 // ══════════════════════════════════════
-let S={per:'f',mo:0,gastos:{},ingresos:{},cierres:{},form:{cat:null,sub:null,who:'Felipe',pct:0},db:null};
+let S={per:'f',mo:0,gastos:{},ingresos:{},cierres:{},liquidaciones:{},form:{cat:null,sub:null,who:'Felipe',pct:0},db:null};
 
 // ══════════════════════════════════════
 // HELPERS
@@ -388,17 +406,12 @@ function initFB(cfg){
     S.db.ref('.info/connected').on('value',s=>{const d=document.getElementById('dot');if(d) d.className='dot'+(s.val()===true?' ok':' sp');});
 
     // Escuchar gastos, ingresos y cierres en paralelo
-    let loaded={g:false,i:false,c:false};
-    function checkLoaded(){
-      if(loaded.g&&loaded.i&&loaded.c){
-        document.getElementById('ldr').style.display='none';
-        document.getElementById('app').style.display='block';
-        render();
-      }
-    }
+    let loaded={g:false,i:false,c:false,l:false};
+    function checkLoaded(){if(loaded.g&&loaded.i&&loaded.c&&loaded.l){document.getElementById('ldr').style.display='none';document.getElementById('app').style.display='block';render();}}
     S.db.ref('gastos').on('value',s=>{S.gastos=s.val()||{};loaded.g=true;checkLoaded();render();},()=>{});
     S.db.ref('ingresos').on('value',s=>{S.ingresos=s.val()||{};loaded.i=true;checkLoaded();render();},()=>{});
     S.db.ref('cierres').on('value',s=>{S.cierres=s.val()||{};loaded.c=true;checkLoaded();render();},()=>{});
+    S.db.ref('liquidaciones').on('value',s=>{S.liquidaciones=s.val()||{};loaded.l=true;checkLoaded();render();},()=>{});
   }catch(e){
     document.getElementById('ldr').style.display='none';
     document.getElementById('setup').style.display='block';
@@ -467,20 +480,30 @@ function calcP(per,mk){
   },{nec:0,gus:0,aho:0,tot:0});
 }
 
-function calcL(desde,hasta){
+function getUltimaLiq(){
+  const liqs=Object.values(S.liquidaciones||{});
+  if(!liqs.length) return null;
+  return liqs.sort((a,b)=>b.fecha.localeCompare(a.fecha))[0];
+}
+
+function calcL(){
+  // Calcular desde la última liquidación
+  const ult=getUltimaLiq();
+  const desde=ult?ult.fecha:'2000-01-01';
+  const hasta=td();
   let vf=0,fv=0;
   garr().filter(g=>g.fecha>=desde&&g.fecha<=hasta).forEach(g=>{
-    // formato nuevo: pctF/pctV
-    // formato viejo: pctOtro
     let pF=0,pV=0;
     if(g.pctF!==undefined){pF=g.pctF;pV=g.pctV;}
     else{if(g.pago==='Felipe'){pF=100-(g.pctOtro||0);pV=g.pctOtro||0;}else{pV=100-(g.pctOtro||0);pF=g.pctOtro||0;}}
-    // Lo que pagó Felipe de más de lo que le corresponde → Vannia le debe
-    // Lo que pagó Vannia de más de lo que le corresponde → Felipe le debe
-    if(g.pago==='Felipe'){const debe=g.monto*(pV/100);vf+=debe;}
-    else if(g.pago==='Vannia'){const debe=g.monto*(pF/100);fv+=debe;}
+    if(g.pago==='Felipe'){vf+=g.monto*(pV/100);}
+    else if(g.pago==='Vannia'){fv+=g.monto*(pF/100);}
   });
-  return{vf,fv,neto:vf-fv};
+  // Restar saldo pendiente de liquidaciones parciales
+  const saldoPendiente=ult?( ult.neto||0):0;
+  // El neto real es gastos acumulados + saldo pendiente de liq parcial
+  const neto=vf-fv+saldoPendiente;
+  return{vf,fv,neto,desde};
 }
 
 const EM={Alimentación:'🍽️',Arriendo:'🏠',Supermercado:'🛒',Transporte:'🚌',Bencina:'⛽',Restaurantes:'🍜',Delivery:'🛵',Celular:'📱','Servicios básicos':'💡',Entretención:'🎬',Ropa:'👗',Salud:'💊',Gimnasio:'🏋️',Streaming:'📺','APV/Inversión':'📈','Fondo emergencia':'🛡️','Tarjeta de crédito':'💳','Crédito/cuota':'📑',Otro:'📦'};
@@ -552,12 +575,19 @@ function rHome(){
 }
 
 function rLB(){
-  const h=td(),d3=new Date();d3.setDate(d3.getDate()-2);
-  const{neto}=calcL(d3.toISOString().split('T')[0],h);
-  const dn=new Date().getDate(),toca=dn%3===0;
+  const{neto}=calcL();
   const el=document.getElementById('lbn');
-  if(Math.abs(neto)<500){el.className='lbn lok';document.getElementById('lt2').textContent='✅ Están a mano';document.getElementById('ld2').textContent=toca?'Toca liquidar hoy':`Próxima en ${3-(dn%3)} día(s)`;document.getElementById('la2').textContent='$0';}
-  else{el.className='lbn ldu';document.getElementById('lt2').textContent=toca?'🔔 Liquidar hoy':'⏳ Pendiente';document.getElementById('ld2').textContent=neto>0?'Vannia → Felipe':'Felipe → Vannia';document.getElementById('la2').textContent=fmt(Math.abs(neto));}
+  if(Math.abs(neto)<500){
+    el.className='lbn lok';
+    document.getElementById('lt2').textContent='✅ Están a mano';
+    document.getElementById('ld2').textContent='Sin deuda pendiente';
+    document.getElementById('la2').textContent='$0';
+  }else{
+    el.className='lbn ldu';
+    document.getElementById('lt2').textContent='⏳ Deuda pendiente';
+    document.getElementById('ld2').textContent=neto>0?'Vannia → Felipe':'Felipe → Vannia';
+    document.getElementById('la2').textContent=fmt(Math.abs(neto));
+  }
 }
 
 function rHist(){
@@ -587,20 +617,102 @@ function rRes(){
 }
 
 function rLiq(){
-  const h=td(),d3=new Date();d3.setDate(d3.getDate()-2);const desde=d3.toISOString().split('T')[0];
-  const{vf,fv,neto}=calcL(desde,h);const dn=new Date().getDate(),toca=dn%3===0;
+  const{vf,fv,neto,desde}=calcL();
+  const h=td();
   let vt,vbg,vc;
-  if(Math.abs(neto)<500){vt='✅ Están a mano\nNo hay que transferir nada';vbg='var(--grl)';vc='var(--gr)';}
+  if(Math.abs(neto)<500){vt='✅ Están a mano\nSin deuda pendiente';vbg='var(--grl)';vc='var(--gr)';}
   else if(neto>0){vt=`💰 Vannia le debe\na Felipe\n${fmt(neto)}`;vbg='var(--tl)';vc='var(--td)';}
   else{vt=`💸 Felipe le debe\na Vannia\n${fmt(Math.abs(neto))}`;vbg='var(--pl)';vc='var(--pd)';}
-  const det=garr().filter(g=>g.fecha>=desde&&g.fecha<=h&&g.pctOtro>0).sort((a,b)=>b.fecha.localeCompare(a.fecha));
-  document.getElementById('liq').innerHTML=`<div class="vb" style="background:${vbg}"><div class="vt" style="color:${vc}">${vt}</div></div><div class="lc"><div class="ltt">${toca?'🔔 Toca liquidar hoy':`⏳ Próxima en ${3-(dn%3)} día(s)`}</div><div class="lr"><span class="lrl">Período</span><span class="lrv" style="font-size:12px">${desde.split('-').reverse().join('/')} → ${h.split('-').reverse().join('/')}</span></div><div class="lr"><span class="lrl">Felipe pagó → Vannia debe</span><span class="lrv" style="color:var(--t)">${fmt(vf)}</span></div><div class="lr"><span class="lrl">Vannia pagó → Felipe debe</span><span class="lrv" style="color:var(--p)">${fmt(fv)}</span></div></div>${det.length?`<div class="lc"><div class="ltt">Detalle</div>${det.map(g=>{
-    let pF2,pV2;
+
+  const ult=getUltimaLiq();
+  const ultFmt=ult?'Última liquidación: '+ult.fecha.split('-').reverse().join('/'):'Sin liquidaciones previas';
+
+  // Gastos del período con split
+  const det=garr().filter(g=>g.fecha>=desde&&g.fecha<=h).filter(g=>{
+    let pF2=0,pV2=0;
     if(g.pctF!==undefined){pF2=g.pctF;pV2=g.pctV;}
     else{if(g.pago==='Felipe'){pF2=100-(g.pctOtro||0);pV2=g.pctOtro||0;}else{pV2=100-(g.pctOtro||0);pF2=g.pctOtro||0;}}
-    return `<div class="lr"><span class="lrl">${EM[g.sub]||'📦'} ${g.desc}</span><span class="lrv" style="font-size:12px;color:var(--gm)">${g.pago} pagó ${fmt(g.monto)} · F:${pF2}% V:${pV2}%</span></div>`;
-  }).join('')}</div>`:''}`;
+    return pF2>0&&pV2>0;
+  }).sort((a,b)=>b.fecha.localeCompare(a.fecha));
+
+  // Historial de liquidaciones
+  const histLiq=Object.values(S.liquidaciones||{}).sort((a,b)=>b.fecha.localeCompare(a.fecha)).slice(0,5);
+
+  const btnLiq=Math.abs(neto)>=500?`<button class="btn-liq-total" onclick="openLiqModal(${neto})">⚖️ Liquidar ahora</button>`:'';
+
+  document.getElementById('liq').innerHTML=`
+    <div class="vb" style="background:${vbg}"><div class="vt" style="color:${vc}">${vt}</div></div>
+    ${btnLiq}
+    <div class="lc" style="margin-top:12px">
+      <div class="ltt">Desde la última liquidación</div>
+      <div class="lr"><span class="lrl">Período</span><span class="lrv" style="font-size:12px">${desde.split('-').reverse().join('/')} → ${h.split('-').reverse().join('/')}</span></div>
+      <div class="lr"><span class="lrl">${ultFmt}</span></div>
+      <div class="lr"><span class="lrl">Felipe pagó → Vannia debe</span><span class="lrv" style="color:var(--t)">${fmt(vf)}</span></div>
+      <div class="lr"><span class="lrl">Vannia pagó → Felipe debe</span><span class="lrv" style="color:var(--p)">${fmt(fv)}</span></div>
+    </div>
+    ${det.length?`<div class="lc"><div class="ltt">Gastos con split del período</div>
+    ${det.map(g=>{
+      let pF2,pV2;
+      if(g.pctF!==undefined){pF2=g.pctF;pV2=g.pctV;}
+      else{if(g.pago==='Felipe'){pF2=100-(g.pctOtro||0);pV2=g.pctOtro||0;}else{pV2=100-(g.pctOtro||0);pF2=g.pctOtro||0;}}
+      return `<div class="lr"><span class="lrl">${EM[g.sub]||'📦'} ${g.desc}</span><span class="lrv" style="font-size:12px;color:var(--gm)">${g.pago} pagó ${fmt(g.monto)} · F:${pF2}% V:${pV2}%</span></div>`;
+    }).join('')}</div>`:''}
+    ${histLiq.length?`<div class="lc"><div class="ltt">Historial de liquidaciones</div>
+    ${histLiq.map(l=>`
+      <div class="liq-hist-item">
+        <div class="liq-hist-ico" style="background:${l.neto>0?'var(--tl)':'var(--pl)'}">${l.neto>0?'💰':'💸'}</div>
+        <div class="liq-hist-info">
+          <div class="liq-hist-desc">${l.neto>0?'Vannia pagó a Felipe':'Felipe pagó a Vannia'}</div>
+          <div class="liq-hist-date">${l.fecha.split('-').reverse().join('/')} · ${l.tipo==='parcial'?'Parcial':'Total'}</div>
+        </div>
+        <div class="liq-hist-amt" style="color:${l.neto>0?'var(--t)':'var(--p)'}">${fmt(Math.abs(l.montoPagado))}</div>
+      </div>`).join('')}
+    </div>`:''}`;
 }
+
+function openLiqModal(neto){
+  const quien=neto>0?'Vannia':'Felipe';
+  const aQuien=neto>0?'Felipe':'Vannia';
+  const total=Math.abs(neto);
+  document.getElementById('liq-modal-body').innerHTML=`
+    <div style="background:${neto>0?'var(--tl)':'var(--pl)'};border-radius:var(--rads);padding:16px;text-align:center;margin-bottom:16px">
+      <div style="font-size:13px;color:var(--gm);margin-bottom:4px">${quien} le debe a ${aQuien}</div>
+      <div style="font-size:32px;font-weight:800;color:${neto>0?'var(--td)':'var(--pd)'}">${fmt(total)}</div>
+    </div>
+    <button class="btn-liq-total" onclick="ejecutarLiq(${total},${neto},'total')">✅ Liquidar todo — ${fmt(total)}</button>
+    <div style="margin-top:16px;margin-bottom:8px">
+      <label class="fl">O ingresa el monto parcial a liquidar:</label>
+      <div class="liq-monto-wrap">
+        <input type="number" class="liq-monto-inp" id="monto-parcial" placeholder="${fmt(total)}" inputmode="numeric">
+      </div>
+    </div>
+    <button class="btn-liq-parcial" onclick="ejecutarLiqParcial(${neto})">💸 Liquidar monto parcial</button>
+    <button class="btn btg" onclick="closeLiqModal()" style="margin-top:8px">Cancelar</button>`;
+  document.getElementById('mo-liq').classList.add('open');
+}
+
+function ejecutarLiq(total,neto,tipo){
+  const id=Date.now().toString();
+  const liq={id,fecha:td(),tipo,montoPagado:total,neto:0};
+  S.db.ref('liquidaciones/'+id).set(liq)
+    .then(()=>{closeLiqModal();toast('✅ Liquidación registrada — saldo en $0');rLiq();rLB();})
+    .catch(()=>toast('⚠️ Error'));
+}
+
+function ejecutarLiqParcial(neto){
+  const monto=parseFloat(document.getElementById('monto-parcial').value)||0;
+  if(!monto||monto<=0){toast('⚠️ Ingresa un monto');return;}
+  const total=Math.abs(neto);
+  if(monto>total){toast('⚠️ El monto no puede superar la deuda');return;}
+  const pendiente=neto>0?(total-monto):(-(total-monto));
+  const id=Date.now().toString();
+  const liq={id,fecha:td(),tipo:'parcial',montoPagado:monto,neto:pendiente};
+  S.db.ref('liquidaciones/'+id).set(liq)
+    .then(()=>{closeLiqModal();toast(`✅ Liquidado ${fmt(monto)} — queda pendiente ${fmt(Math.abs(pendiente))}`);rLiq();rLB();})
+    .catch(()=>toast('⚠️ Error'));
+}
+
+function closeLiqModal(){document.getElementById('mo-liq').classList.remove('open');}
 
 function rCierres(){
   const cierres=Object.values(S.cierres).sort((a,b)=>b.mes.localeCompare(a.mes));
@@ -726,6 +838,7 @@ const fb=lFB();
 if(fb) initFB(fb);
 else{document.getElementById('ldr').style.display='none';document.getElementById('setup').style.display='block';}
 document.getElementById('mo').addEventListener('click',function(e){if(e.target===this) closeM();});
+document.getElementById('mo-liq').addEventListener('click',function(e){if(e.target===this) closeLiqModal();});
 </script>
 </body>
 </html>
