@@ -180,6 +180,9 @@ html,body{height:100%;background:#F0F2F5;font-family:-apple-system,'Segoe UI',sa
 .spn{width:36px;height:36px;border:3px solid var(--gl);border-top-color:var(--t);border-radius:50%;animation:spin .8s linear infinite;}
 @keyframes spin{to{transform:rotate(360deg);}}
 .ldt{font-size:14px;color:var(--gm);}
+.mc-extra{margin-top:6px;}
+.mc-falta{font-size:11px;font-weight:600;color:var(--r);}
+.mc-pot{font-size:11px;font-weight:600;color:var(--gr);}
 .liq-hist-item{background:var(--w);border-radius:var(--rads);padding:12px 14px;margin-bottom:8px;display:flex;align-items:center;gap:10px;box-shadow:0 2px 8px rgba(0,0,0,.06);}
 .liq-hist-ico{width:36px;height:36px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0;}
 .liq-hist-info{flex:1;}
@@ -257,10 +260,34 @@ html,body{height:100%;background:#F0F2F5;font-family:-apple-system,'Segoe UI',sa
 
     <div class="hero hf" id="hero"><div class="hbg"></div><div class="hl">Disponible para gustos hoy</div><div class="ha" id="ha">$0</div><div class="hs" id="hs"></div></div>
     <div class="mts">
-      <div class="mc"><div class="ml2">Necesidades</div><div class="mv" id="mnec">$0</div><div class="ms" id="msnec"></div><div class="bw"><div class="bf" id="bnec"></div></div></div>
-      <div class="mc"><div class="ml2">Gustos</div><div class="mv" id="mgus">$0</div><div class="ms" id="msgus"></div><div class="bw"><div class="bf" id="bgus"></div></div></div>
-      <div class="mc"><div class="ml2">Ahorro</div><div class="mv" id="maho">$0</div><div class="ms" id="msaho"></div><div class="bw"><div class="bf" id="baho"></div></div></div>
-      <div class="mc"><div class="ml2">Total</div><div class="mv" id="mtot">$0</div><div class="ms" id="mstot"></div><div class="bw"><div class="bf" id="btot"></div></div></div>
+      <div class="mc">
+        <div class="ml2">Necesidades</div>
+        <div class="mv" id="mnec">$0</div>
+        <div class="ms" id="msnec"></div>
+        <div class="bw"><div class="bf" id="bnec"></div></div>
+        <div class="mc-extra"><span class="mc-falta" id="fnec"></span></div>
+      </div>
+      <div class="mc">
+        <div class="ml2">Gustos</div>
+        <div class="mv" id="mgus">$0</div>
+        <div class="ms" id="msgus"></div>
+        <div class="bw"><div class="bf" id="bgus"></div></div>
+        <div class="mc-extra"><span class="mc-falta" id="fgus"></span></div>
+      </div>
+      <div class="mc">
+        <div class="ml2">Ahorro</div>
+        <div class="mv" id="maho">$0</div>
+        <div class="ms" id="msaho"></div>
+        <div class="bw"><div class="bf" id="baho"></div></div>
+        <div class="mc-extra"><span class="mc-pot" id="paho"></span></div>
+      </div>
+      <div class="mc">
+        <div class="ml2">Total</div>
+        <div class="mv" id="mtot">$0</div>
+        <div class="ms" id="mstot"></div>
+        <div class="bw"><div class="bf" id="btot"></div></div>
+        <div class="mc-extra"><span class="mc-pot" id="ptot"></span></div>
+      </div>
     </div>
     <div class="lbn lok" id="lbn" onclick="setV('liq')"><div><div class="lt2" id="lt2">Liquidación</div><div class="ld2" id="ld2"></div></div><div class="la2" id="la2">$0</div></div>
     <div class="sh"><div class="st">Últimos gastos</div><div class="sl" onclick="setV('hist')">Ver todos →</div></div>
@@ -442,14 +469,20 @@ function cerrarMes(mk){
   const mF=getMetas('f',mk),mV=getMetas('v',mk);
   const gF=calcP('f',mk),gV=calcP('v',mk);
 
+  // Ahorro real = lo registrado + lo no gastado (ingreso - nec - gus - aho registrado)
+  const ahorRealF=gF.aho + Math.max(0, ingF - gF.nec - gF.gus - gF.aho);
+  const ahorRealV=gV.aho + Math.max(0, ingV - gV.nec - gV.gus - gV.aho);
+
   const cierre={
     mes:mk,
     fechaCierre:td(),
     ingF,ingV,
     mNecF:mF.nec,mGusF:mF.gus,mAhoF:mF.aho,
     mNecV:mV.nec,mGusV:mV.gus,mAhoV:mV.aho,
-    gNecF:gF.nec,gGusF:gF.gus,gAhoF:gF.aho,
-    gNecV:gV.nec,gGusV:gV.gus,gAhoV:gV.aho,
+    gNecF:gF.nec,gGusF:mF.gus,gAhoF:ahorRealF,
+    gNecV:gV.nec,gGusV:gV.gus,gAhoV:ahorRealV,
+    ahorPotF: Math.max(0, ingF - gF.nec - gF.gus - gF.aho),
+    ahorPotV: Math.max(0, ingV - gV.nec - gV.gus - gV.aho),
   };
   S.db.ref('cierres/'+mk).set(cierre)
     .then(()=>{toast('✅ Mes cerrado y guardado');setV('cierres');})
@@ -563,12 +596,24 @@ function rHome(){
   document.getElementById('hero').className='hero '+(per==='f'?'hf':'hv');
   document.getElementById('ha').textContent=fmt(disp);
   document.getElementById('hs').textContent=dR+' días restantes del mes';
-  [['nec',g.nec,m.nec],['gus',g.gus,m.gus],['aho',g.aho,m.aho],['tot',g.tot,getIng(per,mk)]].forEach(([k,v,mx])=>{
+  const ing=getIng(per,mk);
+  // Ahorro potencial = ingreso - nec gastado - gus gastado - aho ya registrado
+  const ahorPot=Math.max(0, ing - g.nec - g.gus - g.aho);
+
+  [['nec',g.nec,m.nec],['gus',g.gus,m.gus],['aho',g.aho,m.aho],['tot',g.tot,ing]].forEach(([k,v,mx])=>{
     const p2=pct(v,mx);
     document.getElementById('m'+k).textContent=fmt(v);
     document.getElementById('ms'+k).textContent=k==='tot'?p2+'% del ingreso':'de '+fmt(mx);
     const b=document.getElementById('b'+k);b.style.width=p2+'%';b.style.background=brc(p2);
   });
+  // Faltante en necesidades y gustos
+  const faltaNec=Math.max(0,m.nec-g.nec);
+  const faltaGus=Math.max(0,m.gus-g.gus);
+  document.getElementById('fnec').textContent=faltaNec>0?`Disponible: ${fmt(faltaNec)}`:'⚠️ Meta superada';
+  document.getElementById('fgus').textContent=faltaGus>0?`Disponible: ${fmt(faltaGus)}`:'⚠️ Meta superada';
+  // Ahorro potencial
+  document.getElementById('paho').textContent=ahorPot>0?`Potencial: ${fmt(ahorPot)}`:'';
+  document.getElementById('ptot').textContent=`Ahorro potencial: ${fmt(ahorPot)}`;
   const nom=DEF[per].nom,otro=per==='f'?'Vannia':'Felipe';
   const rel=garr().filter(g2=>g2.mes===mk&&(g2.pago===nom||(g2.pctOtro>0&&g2.pago===otro))).sort((a,b)=>b.fecha.localeCompare(a.fecha)).slice(0,5);
   document.getElementById('rec').innerHTML=rel.length?rel.map(eH).join(''):`<div class="empty"><div class="ei2">📝</div><div class="et">Sin gastos este mes</div><div class="esb">Toca + para registrar</div></div>`;
@@ -607,11 +652,25 @@ function rRes(){
   const aF=garr().filter(g=>g.cat==='Ahorro').reduce((s,g)=>s+(g.pago==='Felipe'?g.monto*(1-g.pctOtro/100):g.monto*(g.pctOtro/100)),0);
   const aV=garr().filter(g=>g.cat==='Ahorro').reduce((s,g)=>s+(g.pago==='Vannia'?g.monto*(1-g.pctOtro/100):g.monto*(g.pctOtro/100)),0);
 
-  // Botón cerrar mes
+  // Botón cerrar mes (disponible en cualquier momento)
   const hasCierre=S.cierres[mk];
+  const ingF2=getIng('f',mk),ingV2=getIng('v',mk);
+  const potF=Math.max(0,ingF2-gF.nec-gF.gus-gF.aho);
+  const potV=Math.max(0,ingV2-gV.nec-gV.gus-gV.aho);
   const btnCierre=hasCierre
-    ?`<div style="background:var(--grl);border-radius:var(--rads);padding:10px 14px;text-align:center;font-size:13px;font-weight:600;color:var(--gr);margin-bottom:10px">✅ Mes cerrado el ${hasCierre.fechaCierre}</div>`
-    :`<button class="btn btb" onclick="cerrarMes('${mk}')" style="margin-bottom:10px">📅 Cerrar mes y guardar historial</button>`;
+    ?`<div style="background:var(--grl);border-radius:var(--rads);padding:12px 14px;margin-bottom:10px">
+        <div style="font-size:13px;font-weight:700;color:var(--gr)">✅ Mes cerrado el ${hasCierre.fechaCierre}</div>
+        <div style="font-size:12px;color:var(--gr);margin-top:4px">Ahorro registrado: Felipe ${fmt(hasCierre.gAhoF)} · Vannia ${fmt(hasCierre.gAhoV)}</div>
+        <button class="btn btg" onclick="cerrarMes('${mk}')" style="margin-top:8px;font-size:13px;padding:10px">🔄 Actualizar cierre</button>
+      </div>`
+    :`<div style="background:var(--bl);border-radius:var(--rads);padding:12px 14px;margin-bottom:10px">
+        <div style="font-size:13px;font-weight:700;color:var(--bd)">📅 Cerrar mes</div>
+        <div style="font-size:12px;color:var(--bd);margin-top:4px">
+          Al cerrar, lo no gastado se suma al ahorro:<br>
+          Felipe +${fmt(potF)} · Vannia +${fmt(potV)}
+        </div>
+        <button class="btn btb" onclick="cerrarMes('${mk}')" style="margin-top:8px;font-size:13px;padding:10px">Cerrar y guardar historial</button>
+      </div>`;
 
   document.getElementById('res').innerHTML=`${btnCierre}${pc('Felipe',gF,mF,'t',getIng('f',mk))}${pc('Vannia',gV,mV,'p',getIng('v',mk))}<div class="pc"><div class="pch"><div class="pcn" style="color:var(--b)">💾 Ahorro acumulado total</div></div><div class="lr"><span class="lrl">Felipe</span><span class="lrv" style="color:var(--t)">${fmt(aF)}</span></div><div class="lr"><span class="lrl">Vannia</span><span class="lrv" style="color:var(--p)">${fmt(aV)}</span></div><div class="lr"><span class="lrl" style="font-weight:700">Conjunto</span><span class="lrv" style="color:var(--b);font-size:16px">${fmt(aF+aV)}</span></div></div>`;
 }
@@ -722,11 +781,12 @@ function rCierres(){
     return;
   }
 
-  function rowPC(lbl,gasto,meta){
+  function rowPC(lbl,gasto,meta,extra){
     const p2=pct(gasto,meta);
     const cls=p2<=100?'cp-ok':'cp-bad';
     const e=p2<=100?'✅':p2<=115?'⚠️':'🔴';
-    return `<div class="cp-row"><span class="cp-lbl">${lbl} ${e}</span><span class="cp-val ${cls}">${fmt(gasto)} / ${fmt(meta)} (${p2}%)</span></div>`;
+    const extraHtml=extra?`<span style="font-size:10px;color:var(--gr);margin-left:6px">(+${fmt(extra)} no gastado)</span>`:'';
+    return `<div class="cp-row"><span class="cp-lbl">${lbl} ${e}${extraHtml}</span><span class="cp-val ${cls}">${fmt(gasto)} / ${fmt(meta)} (${p2}%)</span></div>`;
   }
 
   el.innerHTML=cierres.map(c=>{
@@ -742,14 +802,14 @@ function rCierres(){
         <div class="cp-nombre cp-f">👤 Felipe — ingreso: ${fmt(c.ingF)}</div>
         ${rowPC('Necesidades',c.gNecF,c.mNecF)}
         ${rowPC('Gustos',c.gGusF,c.mGusF)}
-        ${rowPC('Ahorro',c.gAhoF,c.mAhoF)}
+        ${rowPC('Ahorro',c.gAhoF,c.mAhoF,c.ahorPotF)}
       </div>
       <hr class="cierre-divider">
       <div class="cierre-persona">
         <div class="cp-nombre cp-v">👤 Vannia — ingreso: ${fmt(c.ingV)}</div>
         ${rowPC('Necesidades',c.gNecV,c.mNecV)}
         ${rowPC('Gustos',c.gGusV,c.mGusV)}
-        ${rowPC('Ahorro',c.gAhoV,c.mAhoV)}
+        ${rowPC('Ahorro',c.gAhoV,c.mAhoV,c.ahorPotV)}
       </div>
     </div>`;
   }).join('');
