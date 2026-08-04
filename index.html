@@ -516,26 +516,31 @@ function calcP(per,mk){
 function getUltimaLiq(){
   const liqs=Object.values(S.liquidaciones||{});
   if(!liqs.length) return null;
-  return liqs.sort((a,b)=>b.fecha.localeCompare(a.fecha))[0];
+  // Ordenar por timestamp exacto (ms) para evitar ambigüedad cuando hay varias en el mismo día
+  return liqs.sort((a,b)=>(b.ts||0)-(a.ts||0))[0];
 }
 
 function calcL(){
-  // Calcular desde la última liquidación
   const ult=getUltimaLiq();
-  const desde=ult?ult.fecha:'2000-01-01';
+  // Usar timestamp exacto de la liquidación para excluir gastos anteriores o del mismo instante
+  const desdeTs=ult?(ult.ts||0):0;
   const hasta=td();
   let vf=0,fv=0;
-  garr().filter(g=>g.fecha>=desde&&g.fecha<=hasta).forEach(g=>{
+  garr().filter(g=>{
+    // Incluir solo gastos registrados DESPUÉS de la última liquidación
+    const gTs=g.ts||0;
+    return gTs>desdeTs && g.fecha<=hasta;
+  }).forEach(g=>{
     let pF=0,pV=0;
     if(g.pctF!==undefined){pF=g.pctF;pV=g.pctV;}
     else{if(g.pago==='Felipe'){pF=100-(g.pctOtro||0);pV=g.pctOtro||0;}else{pV=100-(g.pctOtro||0);pF=g.pctOtro||0;}}
     if(g.pago==='Felipe'){vf+=g.monto*(pV/100);}
     else if(g.pago==='Vannia'){fv+=g.monto*(pF/100);}
   });
-  // Restar saldo pendiente de liquidaciones parciales
-  const saldoPendiente=ult?( ult.neto||0):0;
-  // El neto real es gastos acumulados + saldo pendiente de liq parcial
+  // Saldo pendiente de liquidación parcial
+  const saldoPendiente=ult?(ult.neto||0):0;
   const neto=vf-fv+saldoPendiente;
+  const desde=ult?ult.fecha:'inicio';
   return{vf,fv,neto,desde};
 }
 
@@ -751,11 +756,17 @@ function openLiqModal(neto){
 }
 
 function ejecutarLiq(total,neto,tipo){
-  const id=Date.now().toString();
-  const liq={id,fecha:td(),tipo,montoPagado:total,neto:0};
+  const ts=Date.now();
+  const id=ts.toString();
+  // neto:0 significa deuda saldada completamente
+  const liq={id,ts,fecha:td(),tipo,montoPagado:total,neto:0};
   S.db.ref('liquidaciones/'+id).set(liq)
-    .then(()=>{closeLiqModal();toast('✅ Liquidación registrada — saldo en $0');rLiq();rLB();})
-    .catch(()=>toast('⚠️ Error'));
+    .then(()=>{
+      closeLiqModal();
+      toast('✅ Liquidación registrada — saldo en $0');
+      // El listener de Firebase actualizará S.liquidaciones y llamará render()
+    })
+    .catch(()=>toast('⚠️ Error al registrar'));
 }
 
 function ejecutarLiqParcial(neto){
@@ -763,12 +774,18 @@ function ejecutarLiqParcial(neto){
   if(!monto||monto<=0){toast('⚠️ Ingresa un monto');return;}
   const total=Math.abs(neto);
   if(monto>total){toast('⚠️ El monto no puede superar la deuda');return;}
+  // El saldo pendiente mantiene el signo: + = Vannia debe a Felipe, - = Felipe debe a Vannia
   const pendiente=neto>0?(total-monto):(-(total-monto));
-  const id=Date.now().toString();
-  const liq={id,fecha:td(),tipo:'parcial',montoPagado:monto,neto:pendiente};
+  const ts=Date.now();
+  const id=ts.toString();
+  const liq={id,ts,fecha:td(),tipo:'parcial',montoPagado:monto,neto:pendiente};
   S.db.ref('liquidaciones/'+id).set(liq)
-    .then(()=>{closeLiqModal();toast(`✅ Liquidado ${fmt(monto)} — queda pendiente ${fmt(Math.abs(pendiente))}`);rLiq();rLB();})
-    .catch(()=>toast('⚠️ Error'));
+    .then(()=>{
+      closeLiqModal();
+      toast('✅ Liquidado '+fmt(monto)+' — pendiente '+fmt(Math.abs(pendiente)));
+      // Firebase listener actualizará automáticamente
+    })
+    .catch(()=>toast('⚠️ Error al registrar'));
 }
 
 function closeLiqModal(){document.getElementById('mo-liq').classList.remove('open');}
@@ -886,8 +903,9 @@ function saveG(){
   if(!S.form.cat){toast('⚠️ Selecciona categoría');return;}
   if(!S.form.sub){toast('⚠️ Selecciona subcategoría');return;}
   if(Math.abs(pctF+pctV-100)>1){toast('⚠️ Los % deben sumar 100');return;}
-  const id=Date.now().toString();
-  S.db.ref('gastos/'+id).set({id,fecha:td(),mes:getMK(0),desc,cat:S.form.cat,sub:S.form.sub,pago:S.form.who,monto,pctF,pctV})
+  const ts=Date.now();
+  const id=ts.toString();
+  S.db.ref('gastos/'+id).set({id,ts,fecha:td(),mes:getMK(0),desc,cat:S.form.cat,sub:S.form.sub,pago:S.form.who,monto,pctF,pctV})
     .then(()=>{closeM();toast('✅ Gasto guardado');}).catch(()=>toast('⚠️ Error'));
 }
 function delG(id){const g=S.gastos[id];if(!g) return;if(confirm(`¿Eliminar "${g.desc}" (${fmt(g.monto)})?`)){S.db.ref('gastos/'+id).remove().then(()=>toast('🗑️ Eliminado')).catch(()=>toast('⚠️ Error'));}}
