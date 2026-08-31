@@ -454,9 +454,20 @@ function saveIngresos(){
   const vf=parseFloat(document.getElementById('ing-f').value)||0;
   const vv=parseFloat(document.getElementById('ing-v').value)||0;
   if(!vf&&!vv){toast('⚠️ Ingresa al menos un monto');return;}
-  const data={f:vf||getIng('f',mk),v:vv||getIng('v',mk),fecha:td()};
+  // Usar los valores ingresados, si alguno está vacío mantener el anterior
+  const anterior=S.ingresos[mk]||{};
+  const data={
+    f: vf||anterior.f||DEF.f.ing,
+    v: vv||anterior.v||DEF.v.ing,
+    fecha:td()
+  };
   S.db.ref('ingresos/'+mk).set(data)
-    .then(()=>{toast('✅ Ingresos de '+getML(S.mo)+' guardados');render();})
+    .then(()=>{
+      // Actualizar S.ingresos localmente para que render() use el dato correcto de inmediato
+      S.ingresos[mk]=data;
+      toast('✅ Ingresos de '+getML(S.mo)+' guardados');
+      render();
+    })
     .catch(()=>toast('⚠️ Error al guardar'));
 }
 
@@ -479,14 +490,18 @@ function cerrarMes(mk){
     ingF,ingV,
     mNecF:mF.nec,mGusF:mF.gus,mAhoF:mF.aho,
     mNecV:mV.nec,mGusV:mV.gus,mAhoV:mV.aho,
-    gNecF:gF.nec,gGusF:mF.gus,gAhoF:ahorRealF,
+    gNecF:gF.nec,gGusF:gF.gus,gAhoF:ahorRealF,
     gNecV:gV.nec,gGusV:gV.gus,gAhoV:ahorRealV,
     ahorPotF: Math.max(0, ingF - gF.nec - gF.gus - gF.aho),
     ahorPotV: Math.max(0, ingV - gV.nec - gV.gus - gV.aho),
   };
   S.db.ref('cierres/'+mk).set(cierre)
-    .then(()=>{toast('✅ Mes cerrado y guardado');setV('cierres');})
-    .catch(()=>toast('⚠️ Error'));
+    .then(()=>{
+      S.cierres[mk]=cierre;
+      toast('✅ Mes '+mk+' cerrado y guardado');
+      setV('cierres');
+    })
+    .catch(()=>toast('⚠️ Error al cerrar'));
 }
 
 // ══════════════════════════════════════
