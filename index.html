@@ -321,7 +321,7 @@ html,body{height:100%;background:#F0F2F5;font-family:-apple-system,'Segoe UI',sa
 <div class="mo" id="mo">
   <div class="md">
     <div class="mh"></div>
-    <div class="mt">Nuevo gasto</div>
+    <div class="mt">Nuevo gasto <span id="modal-mes-lbl" style="font-size:13px;font-weight:500;color:var(--gm)"></span></div>
     <div class="fg"><label class="fl">Monto</label><input type="number" class="fi fb2" id="im" placeholder="$0" inputmode="numeric"></div>
     <div class="fg"><label class="fl">Descripción</label><input type="text" class="fi" id="id2" placeholder="ej. Supermercado, Uber..."></div>
     <div class="fg"><label class="fl">Categoría</label><div class="chips" id="ccat"><div class="chip" data-v="Necesidad" onclick="selC('cat',this,'cn')">🏠 Necesidad</div><div class="chip" data-v="Gusto" onclick="selC('cat',this,'cg')">🎉 Gusto</div><div class="chip" data-v="Ahorro" onclick="selC('cat',this,'ca')">💰 Ahorro</div></div></div>
@@ -848,8 +848,10 @@ function openM(){
   const nom=DEF[S.per].nom;
   document.querySelectorAll('#cwho .chip').forEach(c=>{c.className='chip'+(c.dataset.v===nom?' cw':'');});
   S.form.who=nom;
-  // Inicializar split como personal (100% para quien pagó)
   if(nom==='Felipe') setSplit(100,0); else setSplit(0,100);
+  // Mostrar mes al que se guardará
+  const lbl=document.getElementById('modal-mes-lbl');
+  if(lbl) lbl.textContent='— '+getML(S.mo);
   document.getElementById('mo').classList.add('open');
   setTimeout(()=>document.getElementById('im').focus(),300);
 }
@@ -905,7 +907,7 @@ function saveG(){
   if(Math.abs(pctF+pctV-100)>1){toast('⚠️ Los % deben sumar 100');return;}
   const ts=Date.now();
   const id=ts.toString();
-  S.db.ref('gastos/'+id).set({id,ts,fecha:td(),mes:getMK(0),desc,cat:S.form.cat,sub:S.form.sub,pago:S.form.who,monto,pctF,pctV})
+  S.db.ref('gastos/'+id).set({id,ts,fecha:td(),mes:getMK(S.mo),desc,cat:S.form.cat,sub:S.form.sub,pago:S.form.who,monto,pctF,pctV})
     .then(()=>{closeM();toast('✅ Gasto guardado');}).catch(()=>toast('⚠️ Error'));
 }
 function delG(id){const g=S.gastos[id];if(!g) return;if(confirm(`¿Eliminar "${g.desc}" (${fmt(g.monto)})?`)){S.db.ref('gastos/'+id).remove().then(()=>toast('🗑️ Eliminado')).catch(()=>toast('⚠️ Error'));}}
