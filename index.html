@@ -450,13 +450,13 @@ function initFB(cfg){
 // INGRESOS DEL MES
 // ══════════════════════════════════════
 function saveIngresos(){
-  const mk=getMK(0);
+  const mk=getMK(S.mo);
   const vf=parseFloat(document.getElementById('ing-f').value)||0;
   const vv=parseFloat(document.getElementById('ing-v').value)||0;
   if(!vf&&!vv){toast('⚠️ Ingresa al menos un monto');return;}
   const data={f:vf||getIng('f',mk),v:vv||getIng('v',mk),fecha:td()};
   S.db.ref('ingresos/'+mk).set(data)
-    .then(()=>{toast('✅ Ingresos guardados');render();})
+    .then(()=>{toast('✅ Ingresos de '+getML(S.mo)+' guardados');render();})
     .catch(()=>toast('⚠️ Error al guardar'));
 }
 
