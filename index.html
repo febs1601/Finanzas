@@ -210,6 +210,9 @@ html,body{height:100%;background:#F0F2F5;font-family:-apple-system,'Segoe UI',sa
 .split-total{font-size:15px;font-weight:700;color:var(--g);flex-shrink:0;min-width:40px;text-align:center;}
 .split-total.ok{color:var(--gr);}
 .split-total.bad{color:var(--r);}
+.me-strip{background:var(--w);padding:6px 16px 8px;font-size:11px;color:var(--gm);border-bottom:1px solid #E5E7EB;text-align:center;}
+.me-strip b{color:var(--g);}
+.me-strip u{color:var(--t);cursor:pointer;margin-left:4px;}
 </style>
 </head>
 <body>
@@ -240,6 +243,7 @@ html,body{height:100%;background:#F0F2F5;font-family:-apple-system,'Segoe UI',sa
     <button class="pp pf" id="bf" onclick="setP('f')">👤 Felipe</button>
     <button class="pp" id="bv" onclick="setP('v')">👤 Vannia</button>
   </div>
+  <div class="me-strip" id="me-strip"></div>
 
   <!-- HOME -->
   <div id="v-home" class="view act">
@@ -379,6 +383,16 @@ html,body{height:100%;background:#F0F2F5;font-family:-apple-system,'Segoe UI',sa
     <div id="liq-modal-body"></div>
   </div>
 </div>
+<!-- MODAL: ¿QUIÉN ERES? (se pregunta una vez por celular) -->
+<div class="mo" id="mo-who">
+  <div class="md">
+    <div class="mh"></div>
+    <div class="mt">¿Quién usa este celular?</div>
+    <div style="font-size:13px;color:var(--gm);margin-bottom:16px;line-height:1.5">Así cada gasto que ingreses queda marcado con tu nombre. Solo se pregunta una vez por celular y lo puedes cambiar cuando quieras.</div>
+    <button class="btn btt" onclick="setMe('Felipe')">👤 Soy Felipe</button>
+    <button class="btn btp" onclick="setMe('Vannia')">👤 Soy Vannia</button>
+  </div>
+</div>
 <div class="toast" id="toast"></div>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
@@ -392,6 +406,25 @@ const DEF={f:{ing:2700000,nom:'Felipe'},v:{ing:881624,nom:'Vannia'}};
 // STATE
 // ══════════════════════════════════════
 let S={per:'f',mo:0,gastos:{},ingresos:{},cierres:{},liquidaciones:{},form:{cat:null,sub:null,who:'Felipe',pct:0},db:null};
+
+// ══════════════════════════════════════
+// QUIÉN INGRESA (identidad de este celular)
+// ══════════════════════════════════════
+let ME=null;
+try{const m=localStorage.getItem('fv4_me');if(m==='Felipe'||m==='Vannia') ME=m;}catch(e){}
+function updateMe(){
+  const el=document.getElementById('me-strip');
+  if(el) el.innerHTML=ME?`✍️ Ingresando gastos como <b>${ME}</b> <u onclick="openWho()">cambiar</u>`:'';
+}
+function openWho(){document.getElementById('mo-who').classList.add('open');}
+function setMe(n){
+  ME=n;
+  try{localStorage.setItem('fv4_me',n);}catch(e){}
+  document.getElementById('mo-who').classList.remove('open');
+  updateMe();
+  toast('✅ Ahora ingresas como '+n);
+}
+function ensureMe(){if(!ME) openWho();else updateMe();}
 
 // ══════════════════════════════════════
 // HELPERS
@@ -434,7 +467,7 @@ function initFB(cfg){
 
     // Escuchar gastos, ingresos y cierres en paralelo
     let loaded={g:false,i:false,c:false,l:false};
-    function checkLoaded(){if(loaded.g&&loaded.i&&loaded.c&&loaded.l){document.getElementById('ldr').style.display='none';document.getElementById('app').style.display='block';render();}}
+    function checkLoaded(){if(loaded.g&&loaded.i&&loaded.c&&loaded.l){document.getElementById('ldr').style.display='none';document.getElementById('app').style.display='block';render();ensureMe();}}
     S.db.ref('gastos').on('value',s=>{S.gastos=s.val()||{};loaded.g=true;checkLoaded();render();},()=>{});
     S.db.ref('ingresos').on('value',s=>{S.ingresos=s.val()||{};loaded.i=true;checkLoaded();render();},()=>{});
     S.db.ref('cierres').on('value',s=>{S.cierres=s.val()||{};loaded.c=true;checkLoaded();render();},()=>{});
@@ -571,7 +604,9 @@ function eH(g){
   const pMio=S.per==='f'?pF:pV;
   const ms=g.monto*(pMio/100);
   const esPersonal=pF===100||pV===100;
-  const lb=esPersonal?`Personal (${g.pago})`:`F:${pF}% V:${pV}% · pagó ${g.pago}`;
+  // Gastos antiguos no tienen "ingresadoPor": se asume que lo ingresó quien pagó
+  const quienIng=g.ingresadoPor||g.pago;
+  const lb=(esPersonal?`Personal (${g.pago})`:`F:${pF}% V:${pV}% · pagó ${g.pago}`)+` · ✍️ ${quienIng}`;
   const bc=g.cat==='Necesidad'?'bn':g.cat==='Gusto'?'bg2':'ba';
   const fd=g.fecha?g.fecha.split('-').reverse().join('/'):'';
   return `<div class="ei" onclick="delG('${g.id}')"><div class="eic" style="background:${cbg(g.cat)}">${EM[g.sub]||'📦'}</div><div class="ein"><div class="en">${g.desc}</div><div class="em">${fd} · ${lb}</div></div><div class="er"><div class="ea">${fmt(ms)}</div><div class="eb ${bc}">${g.cat}</div></div></div>`;
@@ -920,9 +955,10 @@ function saveG(){
   if(!S.form.cat){toast('⚠️ Selecciona categoría');return;}
   if(!S.form.sub){toast('⚠️ Selecciona subcategoría');return;}
   if(Math.abs(pctF+pctV-100)>1){toast('⚠️ Los % deben sumar 100');return;}
+  if(!ME){openWho();toast('⚠️ Primero indica quién eres');return;}
   const ts=Date.now();
   const id=ts.toString();
-  S.db.ref('gastos/'+id).set({id,ts,fecha:td(),mes:getMK(S.mo),desc,cat:S.form.cat,sub:S.form.sub,pago:S.form.who,monto,pctF,pctV})
+  S.db.ref('gastos/'+id).set({id,ts,fecha:td(),mes:getMK(S.mo),desc,cat:S.form.cat,sub:S.form.sub,pago:S.form.who,ingresadoPor:ME,monto,pctF,pctV})
     .then(()=>{closeM();toast('✅ Gasto guardado');}).catch(()=>toast('⚠️ Error'));
 }
 function delG(id){const g=S.gastos[id];if(!g) return;if(confirm(`¿Eliminar "${g.desc}" (${fmt(g.monto)})?`)){S.db.ref('gastos/'+id).remove().then(()=>toast('🗑️ Eliminado')).catch(()=>toast('⚠️ Error'));}}
